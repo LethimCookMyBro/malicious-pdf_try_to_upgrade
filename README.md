@@ -4,7 +4,7 @@
 
 # Malicious PDF Generator ☠️
 
-Generate 67 malicious PDF test files for testing phone-home callbacks, SSRF, XSS, XXE, NTLM credential theft, and data exfiltration in PDF viewers, converters, and web applications. Can be used with [Burp Collaborator](https://portswigger.net/burp/documentation/collaborator) or [Interact.sh](https://github.com/projectdiscovery/interactsh) 
+Generate malicious PDF/SVG test files for testing phone-home callbacks, SSRF, XSS, XXE, NTLM credential theft, and data exfiltration in PDF viewers, converters, and web applications. The full matrix contains 73 test cases; the default run skips the EICAR antivirus test and writes 71 PDFs plus one SVG. Can be used with [Burp Collaborator](https://portswigger.net/burp/documentation/collaborator) or [Interact.sh](https://github.com/projectdiscovery/interactsh) 
 
 Used for penetration testing, bug bounty hunting, and/or red-teaming etc. I created this tool because I needed a tool to generate a bunch of PDF files with various links. Educational and professional purposes only.
 
@@ -22,11 +22,19 @@ Output will be written to the `output/` directory as: test1.pdf, test2.pdf, test
 ```
 --output-dir DIR    Directory to save generated PDF files (default: output/)
 --no-credit         Do not embed credit/attribution metadata in generated PDFs
---obfuscate LEVEL   Obfuscation level (0-3):
+--include-eicar     Include test11.pdf with the EICAR antivirus test string
+--list-tests        List selected test files without writing payload files
+--obfuscate LEVEL   Obfuscation level (0-9):
                       0 = None (default)
                       1 = PDF name hex encoding + string octal/hex encoding
                       2 = Level 1 + JS bracket notation + javascript: URI case/whitespace obfuscation
                       3 = Level 2 + FlateDecode stream compression
+                      4 = Level 3 + JS payload staging (base64/charcode decoder wrap)
+                      5 = Level 4 + JS unescape() encoding
+                      6 = Level 5 + fake file header
+                      7 = Level 6 + Acrobat/Reader anti-emulation checks
+                      8 = Level 7 + best-effort empty-password PDF encryption for parseable PDFs
+                      9 = Level 8 + best-effort object stream rewrite for parseable PDFs
 ```
 
 Example with obfuscation:
@@ -34,9 +42,9 @@ Example with obfuscation:
 python3 malicious-pdf.py https://your-interact-sh-url --obfuscate 2
 ```
 
-Maximum obfuscation (Level 4 wraps JS payloads in a base64 decoder stub so the original API calls never appear as literal substrings):
+Maximum obfuscation:
 ```
-python3 malicious-pdf.py https://your-interact-sh-url --obfuscate 4
+python3 malicious-pdf.py https://your-interact-sh-url --obfuscate 9
 ```
 
 ## Purpose
@@ -47,6 +55,13 @@ python3 malicious-pdf.py https://your-interact-sh-url --obfuscate 4
 - Test server-side PDF processing libraries (PDFBox, iText, etc.)
 - Test PDF static analysis tools — staged JS payloads (form-field `/V`, base64 decoder) defeat naïve `/JS` regex scanners
 - Bug bounty hunting — useful for finding SSRF, XXE, blind callbacks, and NTLM leaks in file upload endpoints, PDF-to-image converters, and document processing pipelines on programs that accept PDF input
+
+## Windows Security / Antivirus Notes
+
+Generated files are intentionally suspicious and may be quarantined by Windows Security or other antivirus tools. `test11.pdf` embeds the EICAR antivirus test string and is skipped by default; pass `--include-eicar` only when you explicitly want to test antivirus detection. If Defender has already alerted on files in `output/`, delete those generated files and clear the Defender protection history from Windows Security if you want the old alert entry gone.
+
+See `docs/antigravity-audit.md` for the current audit of the obfuscation claims
+and the known limits of levels 8 and 9.
 
 ## Credits
 - [Insecure features in PDFs](https://web-in-security.blogspot.com/2021/01/insecure-features-in-pdfs.html)
@@ -88,7 +103,7 @@ python3 malicious-pdf.py https://your-interact-sh-url --obfuscate 4
 ## Complete Test Matrix
 
 <details>
-<summary>Click to expand all 70 test cases</summary>
+<summary>Click to expand all 73 test cases</summary>
 
 | Test File | Function | CVE/Reference | Attack Vector | Method | Impact |
 |-----------|----------|---------------|---------------|---------|---------|
@@ -163,23 +178,19 @@ python3 malicious-pdf.py https://your-interact-sh-url --obfuscate 4
 | test46.pdf | `create_malpdf46()` | CVE-2026-25755 | jsPDF object injection | Broken JS string + injected `/AA /O` auto-action | Auto-callback via any viewer (jsPDF < 4.2.0) |
 | test47.pdf | `create_malpdf47()` | PDF 2.0 spec | Associated Files HTML embed | HTML via catalog `/AF` + `/EF` EmbeddedFile | Callback via embedded HTML (PDF 2.0 viewers) |
 | test48.pdf | `create_malpdf48()` | XFA spec | XFA SOAP callback | `<submit method="soap">` with `initialize` event | SOAP HTTP request (Acrobat XFA engine) |
+| test49_1.pdf | `create_malpdf49_1()` | Acrobat JS fingerprinting | Collaboration API probe | `Collab.isDocReadOnly()` result sent via `submitForm()` | Acrobat/Reader capability fingerprint |
+| test49_2.pdf | `create_malpdf49_2()` | Acrobat JS fingerprinting | Plug-in enumeration | `app.plugIns` names/versions sent via `submitForm()` | Installed plug-in fingerprint |
+| test49_3.pdf | `create_malpdf49_3()` | Acrobat JS fingerprinting | Viewer fingerprinting | `app.viewerVersion` and `app.viewerType` sent via `submitForm()` | Viewer version/type fingerprint |
 
 </details>
 
-## Todo: New test cases
-- **Acrobat JS fingerprinting APIs** — Add test cases for reconnaissance/fingerprinting APIs used in the April 2026 Adobe 0-day exploit chain ([ref](https://x.com/Gi7w0rm/status/2042370775546482815)): `Collab.isDocReadOnly` (filesystem probing), `app.plugIns` (enumerate installed plugins), `app.viewerVersion` (version fingerprinting)
-
 ## Todo: Obfuscation methods not yet implemented
-- **Empty-password PDF encryption** — Encrypt all strings/streams with empty user password. Document opens without prompting but static analysis tools cannot read content. Biggest gap in current obfuscation. Ref: [Didier Stevens](https://blog.didierstevens.com/category/pdf/), [How secure is PDF encryption?](https://www.decalage.info/hugo/file_formats_security/pdf/)
-- **Object streams (ObjStm)** — Hide PDF objects inside compressed stream containers. Simple parsers (including PDFiD without `-O` flag) miss objects entirely. Ref: [PDF spec ISO 32000 §7.5.7](https://www.iso.org/standard/63534.html)
+- **Full xref repair for encryption/object streams** — Levels 8 and 9 are best-effort for PDFs that PyPDF2 can parse. Many hand-written PoC PDFs in this repo intentionally omit complete xref/startxref structures, so full coverage needs a tolerant xref repair pass before encryption or object stream rewriting.
 - **getAnnots() code storage** — Split JavaScript payload across annotation metadata fields (subject, author). Retrieve at runtime via `app.doc.getAnnots()[n].subject` and eval. Ref: [Julia Wolf - PDF Obfuscation using getAnnots()](https://blog.didierstevens.com/2010/01/14/)
 - **Info dict data extraction** — Store encoded payload in `/Info` trailer fields (`/Title`, `/Author`). Retrieve at runtime via `info.Title` in JS. Ref: [corkami PDF tricks](https://github.com/corkami/docs/blob/master/PDF/PDF.md)
 - **AcroForm field value extraction** — Store payload fragments in form field `/V` values. Retrieve via `getField("name").value` in JS. Ref: [corkami PDF tricks](https://github.com/corkami/docs/blob/master/PDF/PDF.md)
 - **Names tree split execution** — Split JavaScript across multiple `/Names` entries executed sequentially. Ref: [corkami PDF tricks](https://github.com/corkami/docs/blob/master/PDF/PDF.md)
 - **Incremental updates after %%EOF** — Append new objects/actions after the original `%%EOF` marker via incremental update. Ref: [PDF101 content masking](https://github.com/RUB-NDS/PDF101), [Didier Stevens](https://blog.didierstevens.com/2010/05/18/more-malformed-pdfs/)
-- **JS `unescape()` encoding** — Wrap JS payload in `eval(unescape("%61%6C%65%72%74..."))`. Ref: [corkami PDF tricks](https://github.com/corkami/docs/blob/master/PDF/PDF.md)
-- **Fake file headers** — Prepend JPEG/HTML/other magic bytes before `%PDF-` header (spec allows header within first 1024 bytes). Confuses file-type detection. Ref: [corkami](https://github.com/corkami/docs/blob/master/PDF/PDF.md), [Decalage](https://www.decalage.info/hugo/file_formats_security/pdf/)
-- **Anti-emulation checks** — Detect real Adobe Reader via `event.target.zoomType == "FitPage"` or global variable type checks before executing payload. Ref: [corkami PDF tricks](https://github.com/corkami/docs/blob/master/PDF/PDF.md)
 
 ## Won't implement
 - ~~CVE-2023-26369 - Adobe Acrobat TTF font heap OOB write~~ — Requires binary exploitation (heap spray, ROP chains, shellcode). No public PoC. Cannot produce a simple callback.

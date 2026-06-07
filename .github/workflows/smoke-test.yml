@@ -32,13 +32,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Run catalog unit tests
+        run: |
+          python -m unittest discover -s tests
+
       - name: Generate PDFs
         run: |
           python3 malicious-pdf.py https://example.com --obfuscate ${{ matrix.obfuscate }}
 
       - name: Verify expected number of PDFs produced
         run: |
-          EXPECTED_PDF=69
+          EXPECTED_PDF=71
           EXPECTED_SVG=1
           ACTUAL_PDF=$(find output -maxdepth 1 -name '*.pdf' -type f | wc -l | tr -d ' ')
           ACTUAL_SVG=$(find output -maxdepth 1 -name '*.svg' -type f | wc -l | tr -d ' ')
