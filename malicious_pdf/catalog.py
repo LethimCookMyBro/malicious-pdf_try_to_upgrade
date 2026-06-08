@@ -6,6 +6,22 @@ from .utils import ensure_scheme
 
 FILE_EXTENSIONS = {14: ".svg"}
 
+# Files observed in this workspace's Windows Security history during controlled
+# generation tests. This list is a safety filter, not an evasion mechanism:
+# selected entries are skipped rather than rewritten to bypass detection.
+DEFENDER_OBSERVED_DETECTIONS = {
+    1.1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    13,
+}
+
 
 @dataclass(frozen=True)
 class TestCase:
@@ -210,13 +226,19 @@ def test_filename(key):
     return f"test{key}{ext}"
 
 
-def selected_test_cases(host, profile="all", include_eicar=False):
+def selected_test_cases(host, profile="all", include_eicar=False, exclude_defender_observed=False):
     generators = build_pdf_generators(host)
     if profile != "all":
         allowed = PROFILE_TESTS[profile]
         generators = {key: value for key, value in generators.items() if key in allowed}
     if not include_eicar:
         generators.pop(11, None)
+    if exclude_defender_observed:
+        generators = {
+            key: value
+            for key, value in generators.items()
+            if key not in DEFENDER_OBSERVED_DETECTIONS
+        }
     return [
         TestCase(
             key=key,

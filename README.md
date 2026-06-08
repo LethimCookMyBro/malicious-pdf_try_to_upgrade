@@ -24,6 +24,11 @@ Output will be written to the `output/` directory as: test1.pdf, test2.pdf, test
 --no-credit         Do not embed credit/attribution metadata in generated PDFs
 --include-eicar     Include test11.pdf with the EICAR antivirus test string
 --list-tests        List selected test files without writing payload files
+--av-report         List selected files with local Defender-observed status
+--av-report-json PATH
+                    Write local Defender-observed status to JSON
+--exclude-defender-observed
+                    Skip files observed in this workspace's Defender history
 --obfuscate LEVEL   Obfuscation level (0-9):
                       0 = None (default)
                       1 = PDF name hex encoding + string octal/hex encoding
@@ -42,6 +47,23 @@ Example with obfuscation:
 python3 malicious-pdf.py https://your-interact-sh-url --obfuscate 2
 ```
 
+Preview local Defender-observed safety status without writing payload files:
+```
+python3 malicious-pdf.py https://your-interact-sh-url --av-report
+```
+
+Write the same report to JSON without writing payload files:
+```
+python3 malicious-pdf.py https://your-interact-sh-url --av-report-json av-report.json
+```
+
+Skip samples that were observed in this workspace's Windows Security history:
+```
+python3 malicious-pdf.py https://your-interact-sh-url --exclude-defender-observed
+```
+When this option is used for real generation, the CLI prints how many
+Defender-observed samples were skipped.
+
 Maximum obfuscation:
 ```
 python3 malicious-pdf.py https://your-interact-sh-url --obfuscate 9
@@ -58,7 +80,7 @@ python3 malicious-pdf.py https://your-interact-sh-url --obfuscate 9
 
 ## Windows Security / Antivirus Notes
 
-Generated files are intentionally suspicious and may be quarantined by Windows Security or other antivirus tools. `test11.pdf` embeds the EICAR antivirus test string and is skipped by default; pass `--include-eicar` only when you explicitly want to test antivirus detection. If Defender has already alerted on files in `output/`, delete those generated files and clear the Defender protection history from Windows Security if you want the old alert entry gone.
+Generated files are intentionally suspicious and may be quarantined by Windows Security or other antivirus tools. `test11.pdf` embeds the EICAR antivirus test string and is skipped by default; pass `--include-eicar` only when you explicitly want to test antivirus detection. Use `--av-report` to preview which selected files have been observed in this workspace's Windows Security history, or `--exclude-defender-observed` to skip those files entirely. This is a safety control that avoids writing known-alerting samples; it does not rewrite payloads or guarantee that the remaining files will avoid future antivirus detections. If Defender has already alerted on files in `output/`, delete those generated files and clear the Defender protection history from Windows Security if you want the old alert entry gone.
 
 See `docs/antigravity-audit.md` for the current audit of the obfuscation claims
 and the known limits of levels 8 and 9.

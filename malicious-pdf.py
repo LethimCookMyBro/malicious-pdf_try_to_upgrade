@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 
 from malicious_pdf import __version__
+from malicious_pdf.av_safety import print_av_report, write_av_report_json
 from malicious_pdf.catalog import FILE_EXTENSIONS, selected_test_cases
 from malicious_pdf.credit import inject_credit
 from malicious_pdf.obfuscation import obfuscate_pdf
@@ -62,6 +63,21 @@ def parse_args():
         action="store_true",
         help="Include test11.pdf with the EICAR antivirus test string. This intentionally triggers antivirus products.",
     )
+    parser.add_argument(
+        "--exclude-defender-observed",
+        action="store_true",
+        help="Skip files observed in this workspace's Windows Security history. This does not alter payloads to bypass AV.",
+    )
+    parser.add_argument(
+        "--av-report",
+        action="store_true",
+        help="List selected files with local Defender-observed status without writing payload files.",
+    )
+    parser.add_argument(
+        "--av-report-json",
+        metavar="PATH",
+        help="Write selected files with local Defender-observed status to JSON without writing payload files.",
+    )
     parser.add_argument("--list-tests", action="store_true", help="List selected test files without writing payload files")
     return parser.parse_args()
 
@@ -78,15 +94,25 @@ def remove_stale_eicar(output_dir):
 def main():
     args = parse_args()
     output_dir = Path(args.output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
 
     if not validate_url_or_ip_validators(args.host):
         print("Error: Invalid URL or IP address. Input must have a scheme (e.g. https://) or be a valid IP address.")
         sys.exit(1)
 
-    test_cases = selected_test_cases(args.host, profile=args.profile, include_eicar=args.include_eicar)
-    if not args.include_eicar:
-        remove_stale_eicar(output_dir)
+    test_cases = selected_test_cases(
+        args.host,
+        profile=args.profile,
+        include_eicar=args.include_eicar,
+        exclude_defender_observed=args.exclude_defender_observed,
+    )
+    skipped_defender_observed = 0
+    if args.exclude_defender_observed:
+        unfiltered_test_cases = selected_test_cases(
+            args.host,
+            profile=args.profile,
+            include_eicar=args.include_eicar,
+        )
+        skipped_defender_observed = len(unfiltered_test_cases) - len(test_cases)
 
     obfuscate_level = args.obfuscate
     if args.profile == "stealth" and obfuscate_level < 3:
@@ -99,7 +125,24 @@ def main():
             print(test_case.filename)
         return
 
+    if args.av_report:
+        print_av_report(test_cases)
+        return
+
+    if args.av_report_json:
+        write_av_report_json(test_cases, args.av_report_json)
+        return
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if not args.include_eicar:
+        remove_stale_eicar(output_dir)
+
     print("[+] Creating PDF files..")
+    if skipped_defender_observed:
+        print(
+            f"[+] Skipping {skipped_defender_observed} Defender-observed test(s) "
+            "without rewriting payloads"
+        )
     if args.profile != "all":
         print(f"[+] Profile '{args.profile}': generating {len(test_cases)} test(s)")
 
